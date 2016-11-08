@@ -1,0 +1,157 @@
+#!/usr/bin/env ruby
+###########################################################
+###                                                     ###
+### Author: Maksim Podlesnyi <mpodlesnyi@smartling.com> ###
+###                                                     ###
+###########################################################
+
+require 'elasticsearch-data-cleaner'
+require 'optparse'
+require 'ostruct'
+require 'yaml'
+require 'logger'
+
+::CONFIGFILE_HELP = '---
+events-%Y%m%d:       # index pattern compatible ruby date format directives
+  number: 7          # how many indices script have to keep by pattern above
+  future: true       # leave indices with future timestamp. true by default
+logstash-%Y%m%d:
+  number: 60
+  future: false
+  types:             # types description
+    elb:             # type name. there is no patterns
+      number: 30
+      optimize: true # run _optimize for index after removing this type.
+                     # false by default
+    nginx-pinch-main:
+      number: 10
+      optimize: true
+    nginx-wlb-main:
+      number: 60
+      optimize: true
+
+# Attention: you have to use number of indices greater or equal numbers
+# of indices with types because first of all script deletes indices
+# using index setting.'
+
+class MyOptparse
+
+  def parse(args)
+    options = OpenStruct.new
+    options.dry_run = false
+    options.timeout = 300
+    options.url = 'http://localhost:9200'
+    options.debug = false
+    options.empty = true
+
+    @opt_parser = OptionParser.new do |opts|
+      banner = [
+        $0 + ' --dry-run --config data_rotate.yaml',
+        "\t\t\tdry run for config\n",
+        $0 + ' --debug --config data_rotate.yaml',
+        "\t\t\tenable debug mode\n",
+        $0 + ' -t 600 --config data_rotate.yaml',
+        "\t\t\tincrease http client timeout to 10 minutes\n",
+      ]
+      opts.banner = "Examples:\n\t" + banner.join("\n\t")
+
+      opts.separator ""
+      opts.separator "Specific options:"
+
+      opts.on("-u", "--url URL",
+              "Url of ES API. Default it #{options.url}") do |url|
+          options.url = url
+      end
+
+      opts.on("-t", "--timeout SECONDS",
+              "The timeout for connection to ES API. Default is #{options.timeout}") do |timeout|
+          options.timeout = timeout.to_i
+      end
+
+      opts.on("-c", "--config CONFIG",
+              "YAML file with configuration for rotate data") do |config|
+          options.config = config
+      end
+
+      opts.on("-l", "--logfile LOGFILE",
+              "Log file") do |logfile|
+          options.logfile = logfile
+      end
+
+      opts.on("--dry-run",
+              "Run script without applying any changes") do |dry_run|
+          options.dry_run = true
+      end
+
+      opts.on("--empty",
+              "Delete any empty indices") do |empty|
+          options.empty = false
+      end
+
+      opts.on("--debug",
+              'Debug mode. More verbose') do |debug|
+          options.debug = true
+      end
+
+      opts.separator "Common options:"
+
+      opts.on_tail("-h", "--help", "Show this message") do
+        puts opts
+        puts "\n\n\nConfig file (YAML) example:"
+        puts ::CONFIGFILE_HELP
+        exit(0)
+      end
+
+    end
+      @opt_parser.parse!(args)
+      options
+      rescue OptionParser::ParseError
+        $stderr.print "Error: " + $!.to_s + "\n"
+        puts @opt_parser
+        exit(-1)
+  end
+  def help
+    puts @opt_parser
+  end
+end
+
+begin
+  parser = MyOptparse.new
+  options = parser.parse(ARGV)
+  $logger = Logger.new(options.logfile ? options.logfile : STDOUT)
+  if options.debug
+    $logger.level = Logger::DEBUG
+  else
+    $logger.level = Logger::INFO
+  end
+  if options.logfile
+    $logger.formatter = proc do |severity, datetime, progname, msg|
+       "[#{datetime}] #{severity} : #{msg}\n"
+    end
+    $logger.info("begin")
+  else
+    $logger.formatter = proc do |severity, datetime, progname, msg|
+       "#{msg}\n"
+    end
+  end
+  if options.config
+    if !File.exists?(options.config)
+      raise "can not read config file #{options.config}"
+    end
+  else
+    raise 'please specify path to yaml config file'
+  end
+  config = YAML.load(IO.read(options.config))
+  ess = EScleaner.new options
+  ess.run(config)
+  if options.logfile
+    $logger.info("end")
+  end
+rescue Exception => e
+  if defined?($logger) == 'global-variable'
+    $logger.error e.message
+  else
+    $stderr.puts e.message
+  end
+  exit(1)
+end
