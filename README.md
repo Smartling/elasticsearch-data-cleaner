@@ -28,6 +28,11 @@ logstash-%Y.%m.%d:
 
 ## Installing
 
+from rubygems.org
+```
+gem install elasticsearch-data-cleaner
+```
+or
 ```
 gem build elasticsearch-data-cleaner.gemspec
 gem install elasticsearch-data-cleaner-<version>.gem
