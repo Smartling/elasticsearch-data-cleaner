@@ -96,7 +96,10 @@ class EScleaner
     $logger.info("starting optimize for index #{index}#{@options.dry_run ? ' (dry_run)': ''}")
     if !@options.dry_run
       resp = @connection.post "#{index}/_optimize?only_expunge_deletes=true"
-      $logger.debug(parse_response resp.body)
+      failed = (parse_response resp.body)['_shards']['failed']
+      if failed > 0
+        $logger.warn("optimizing of index #{index} returns #{failed} failed shards")
+      end
     end
   end
 
