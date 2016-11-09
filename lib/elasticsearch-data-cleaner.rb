@@ -92,10 +92,15 @@ class EScleaner
   end
 
   def optimize(index)
-    # Run _optimize
+    # Run _forcemerge or _optimize
+    if @es_version['major'] > 2 or (@es_version['major'] = 2 and @es_version['minor'] >= 1)
+      api = '_forcemerge'
+    else
+      api = '_optimize'
+    end
     $logger.info("starting optimize for index #{index}#{@options.dry_run ? ' (dry_run)': ''}")
     if !@options.dry_run
-      resp = @connection.post "#{index}/_optimize?only_expunge_deletes=true"
+      resp = @connection.post "#{index}/#{api}?only_expunge_deletes=true"
       failed = (parse_response resp.body)['_shards']['failed']
       if failed > 0
         $logger.warn("optimizing of index #{index} returns #{failed} failed shards")
