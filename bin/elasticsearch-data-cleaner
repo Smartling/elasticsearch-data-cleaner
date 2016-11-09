@@ -142,7 +142,7 @@ begin
     raise 'please specify path to yaml config file'
   end
   config = YAML.load(IO.read(options.config))
-  ess = ESrotate.new options
+  ess = EScleaner.new options
   ess.run(config)
   if options.logfile
     $logger.info("end")
