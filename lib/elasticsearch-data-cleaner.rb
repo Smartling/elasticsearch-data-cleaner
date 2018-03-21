@@ -93,7 +93,7 @@ class EScleaner
 
   def optimize(index)
     # Run _forcemerge or _optimize
-    if @es_version['major'] > 2 or (@es_version['major'] = 2 and @es_version['minor'] >= 1)
+    if @es_version['major'] > 2 or (@es_version['major'] == 2 and @es_version['minor'] >= 1)
       api = '_forcemerge'
     else
       api = '_optimize'
